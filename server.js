@@ -2,77 +2,42 @@ const express = require('express');
 const cors = require('cors');
 const multer = require('multer');
 const path = require('path');
-const { GoogleGenerativeAI } = require('@google/generative-ai');
 require('dotenv').config();
 
 const app = express();
 
-// Middlewares
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-// RAM Memory Storage for Vercel Serverless
-const storage = multer.memoryStorage();
+// In-memory buffer storage for Vercel
 const upload = multer({
-  storage: storage,
-  limits: { fileSize: 10 * 1024 * 1024 } // 10MB
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 }
 });
 
-// Initialize Gemini API
-const apiKey = process.env.GEMINI_API_KEY;
-const genAI = apiKey ? new GoogleGenerativeAI(apiKey) : null;
-
-// Model Fallback Priority List
-const MODEL_CANDIDATES = [
-  'gemini-2.0-flash',
-  'gemini-1.5-flash',
-  'gemini-1.5-flash-latest',
-  'gemini-1.5-pro'
-];
-
-// Helper: Try models sequentially until one succeeds
-async function generateWithFallback(prompt, imagePart) {
-  let lastError = null;
-
-  for (const modelName of MODEL_CANDIDATES) {
-    try {
-      const model = genAI.getGenerativeModel({ model: modelName });
-      const result = await model.generateContent([prompt, imagePart]);
-      const responseText = result.response.text().trim();
-      return { responseText, usedModel: modelName };
-    } catch (err) {
-      console.warn(`Model ${modelName} failed (${err.message}). Trying next fallback...`);
-      lastError = err;
-    }
-  }
-  throw lastError || new Error('All model fallbacks exhausted.');
-}
-
-// Classification Handler
 const handleAnalysis = async (req, res) => {
   try {
-    if (!genAI) {
-      return res.status(500).json({
-        error: 'GEMINI_API_KEY is not configured in Vercel environment variables.'
-      });
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      return res.status(500).json({ error: 'GEMINI_API_KEY environment variable is missing.' });
     }
 
     if (!req.file) {
       return res.status(400).json({ error: 'No image file uploaded.' });
     }
 
-    const prompt = `You are an expert waste classification AI for Indian municipal segregation standards.
-Analyze the image and respond ONLY with a raw JSON object (no markdown, no backticks, no explanations):
+    const prompt = `You are an expert waste classification AI for India municipal segregation systems.
+Analyze the image and respond ONLY with a raw JSON object (no markdown, no backticks):
 {
   "item": "Name of the detected object",
-  "category": "DRY" or "WET" or "HAZARDOUS" or "E-WASTE",
-  "bin": "Blue Bin" or "Green Bin" or "Red Bin" or "Special Handling",
+  "category": "DRY",
+  "bin": "Blue Bin",
   "recyclable": true,
   "confidence": 95,
-  "hinglish_message": "A helpful, conversational message in Hinglish explaining how to dispose it",
-  "tips": "Practical step-by-step segregation or cleaning tip",
+  "hinglish_message": "A friendly, localized message in Hinglish explaining how to handle it",
+  "tips": "Practical step-by-step disposal, safety, or cleaning tip",
   "impact": {
     "co2_avoided_kg": 0.25,
     "water_conserved_l": 1.5,
@@ -80,50 +45,78 @@ Analyze the image and respond ONLY with a raw JSON object (no markdown, no backt
   }
 }`;
 
-    const imagePart = {
-      inlineData: {
-        data: req.file.buffer.toString('base64'),
-        mimeType: req.file.mimetype || 'image/jpeg'
+    const mimeType = req.file.mimetype || 'image/jpeg';
+    const base64Data = req.file.buffer.toString('base64');
+
+    // Models to try in priority order
+    const candidateModels = ['gemini-3.5-flash'];
+    let lastError = null;
+    let rawText = '';
+
+    for (const model of candidateModels) {
+      try {
+        const response = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [
+                {
+                  parts: [
+                    { text: prompt },
+                    {
+                      inline_data: {
+                        mime_type: mimeType,
+                        data: base64Data
+                      }
+                    }
+                  ]
+                }
+              ]
+            })
+          }
+        );
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.error?.message || `API error ${response.status}`);
+        }
+
+        rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        if (rawText) break;
+      } catch (err) {
+        lastError = err;
       }
-    };
-
-    const { responseText, usedModel } = await generateWithFallback(prompt, imagePart);
-
-    // Clean any markdown backticks
-    let cleanedText = responseText;
-    if (cleanedText.startsWith('```json')) {
-      cleanedText = cleanedText.replace(/^```json\s*/, '').replace(/\s*```$/, '');
-    } else if (cleanedText.startsWith('```')) {
-      cleanedText = cleanedText.replace(/^```\s*/, '').replace(/\s*```$/, '');
     }
 
-    const parsedData = JSON.parse(cleanedText);
-    parsedData.model_used = usedModel;
+    if (!rawText) {
+      throw lastError || new Error('Failed to generate response from Gemini API.');
+    }
 
-    return res.status(200).json(parsedData);
+    // Clean JSON markdown
+    let cleaned = rawText.trim();
+    if (cleaned.startsWith('```json')) cleaned = cleaned.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+    else if (cleaned.startsWith('```')) cleaned = cleaned.replace(/^```\s*/, '').replace(/\s*```$/, '');
+
+    return res.status(200).json(JSON.parse(cleaned));
   } catch (error) {
-    console.error('Final Classification Error:', error);
-    return res.status(500).json({
-      error: error.message || 'Failed to process waste image classification.'
-    });
+    console.error('Processing error:', error);
+    return res.status(500).json({ error: error.message || 'Classification failed' });
   }
 };
 
-// Routes
 app.post('/api/analyze', upload.single('image'), handleAnalysis);
 app.post('/classify', upload.single('image'), handleAnalysis);
 
-// Root routing
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// Local dev listener
 const PORT = process.env.PORT || 3000;
 if (!process.env.VERCEL) {
-  app.listen(PORT, () => {
-    console.log(`Server running on http://localhost:${PORT}`);
-  });
+  app.listen(PORT, () => console.log(`Running on http://localhost:${PORT}`));
 }
 
 module.exports = app;
