@@ -1,126 +1,86 @@
 const express = require('express');
-const multer = require('multer');
 const cors = require('cors');
-const fs = require('fs');
+const multer = require('multer');
 const path = require('path');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 require('dotenv').config();
 
 const app = express();
-const port = process.env.PORT || 3000;
 
+// Middleware
 app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-if (!fs.existsSync(path.join(__dirname, 'uploads'))) {
-  fs.mkdirSync(path.join(__dirname, 'uploads'));
-}
+// Use in-memory storage (Vercel serverless has a read-only disk)
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 } // 5MB limit
+});
 
-const upload = multer({ dest: path.join(__dirname, 'uploads/') });
-const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+// Initialize Gemini
+const apiKey = process.env.GEMINI_API_KEY;
+const genAI = apiKey ? new GoogleGenerativeAI(apiKey) : null;
 
-async function callGeminiWithRetry(model, payload, apiKey, maxRetries = 2) {
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-goog-api-key': apiKey
-        },
-        body: JSON.stringify(payload)
-      }
-    );
-
-    const data = await res.json();
-    if (res.ok && data.candidates?.[0]?.content?.parts?.[0]?.text) {
-      return JSON.parse(data.candidates[0].content.parts[0].text);
-    }
-
-    const errMsg = data.error?.message || `HTTP ${res.status}`;
-    const isTransient = res.status === 503 || res.status === 429 || errMsg.includes('high demand') || errMsg.includes('Overloaded');
-
-    if (isTransient && attempt < maxRetries) {
-      await sleep(attempt * 1500);
-      continue;
-    }
-    throw new Error(`[${model}] ${errMsg}`);
-  }
-}
-
-app.post('/api/analyze', upload.single('image'), async (req, res) => {
+// Classification Endpoint
+app.post('/classify', upload.single('image'), async (req, res) => {
   try {
+    if (!genAI) {
+      return res.status(500).json({ error: 'GEMINI_API_KEY is not set in environment variables.' });
+    }
+
     if (!req.file) {
-      return res.status(400).json({ error: 'No image file uploaded' });
+      return res.status(400).json({ error: 'No image file uploaded.' });
     }
 
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      return res.status(500).json({ error: 'GEMINI_API_KEY is missing from .env' });
-    }
+    // Use current Gemini 1.5 Flash model
+    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
-    const imageBuffer = fs.readFileSync(req.file.path);
-    const base64Image = imageBuffer.toString('base64');
-    const mimeType = req.file.mimetype || 'image/jpeg';
-    fs.unlink(req.file.path, () => {});
-
-    const prompt = `You are an expert waste classification and safety AI. Classify the discarded item into one of THREE strict handling tiers:
-
-1. "normal" (🟢 Normal / Recyclable): Paper, cardboard, clean plastics, cans, bottles, food scraps, clean glass, organic waste.
-2. "special" (🟡 Special Handling): Items requiring special separation, bulky handling, degreasing, or non-hazardous special facilities (e.g. Styrofoam/Thermocol, textiles/clothes, tires, mattress foam, composite cartons/Tetra Pak, cords/wires, large ceramics).
-3. "hazardous" (🔴 Hazardous): Batteries, chemicals, paint, engine oil, medicines, pesticides, CFL bulbs, mercury tubes, biomedical waste, syringes, toxic electronic waste.
-
-Return a valid JSON object matching this schema:
+    const prompt = `Analyze this waste item and respond STRICTLY with a valid JSON object (no markdown, no backticks, no extra text):
 {
-  "name": "Specific item name",
-  "handlingTier": "normal" | "special" | "hazardous",
-  "category": "Must be one of: Organic (Biodegradable) | Recyclable (Dry Solid) | Special Handling Waste | Hazardous Waste | Electronic Waste (E-Waste) | Biomedical / Clinical | Non-Recyclable Solid | Liquid Waste",
-  "wasteType": "Wet Waste" | "Dry Waste",
-  "warningMessage": "Short caution message if special or hazardous (or null if normal)",
-  "primaryManagement": "Concise disposal instruction",
-  "confidence": 97.5,
-  "steps": ["Step 1", "Step 2", "Step 3"],
-  "co2": 0.25,
-  "water": 3.5,
-  "land": 0.04,
-  "isRecyclable": boolean,
-  "ecoScoreReward": 30,
-  "facts": [
-    {"title": "Material Fact", "text": "Specific fact"},
-    {"title": "Disposal Fact", "text": "Handling fact"}
-  ]
+  "item": "Name of the item",
+  "category": "DRY" or "WET" or "HAZARDOUS" or "E-WASTE",
+  "bin": "Blue Bin" or "Green Bin" or "Red Bin" or "Special Handling",
+  "recyclable": true or false,
+  "confidence": 95,
+  "hinglish_message": "A short, helpful message in conversational Hinglish",
+  "tips": "Practical disposal or composting step",
+  "impact": {
+    "co2_avoided_kg": 0.25,
+    "water_conserved_l": 1.5,
+    "landfill_diverted_m2": 0.05
+  }
 }`;
 
-    const payload = {
-      contents: [{
-        parts: [
-          { text: prompt },
-          { inlineData: { mimeType, data: base64Image } }
-        ]
-      }],
-      generationConfig: { responseMimeType: 'application/json' }
+    const imagePart = {
+      inlineData: {
+        data: req.file.buffer.toString('base64'),
+        mimeType: req.file.mimetype
+      }
     };
 
-    const models = ['gemini-3.7-flash', 'gemini-3.6-flash'];
-    let lastError = null;
+    const result = await model.generateContent([prompt, imagePart]);
+    let text = result.response.text().trim();
 
-    for (const model of models) {
-      try {
-        const result = await callGeminiWithRetry(model, payload, apiKey);
-        return res.json(result);
-      } catch (err) {
-        lastError = err.message;
-      }
+    // Strip markdown formatting if returned
+    if (text.startsWith('```json')) {
+      text = text.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+    } else if (text.startsWith('```')) {
+      text = text.replace(/^```\s*/, '').replace(/\s*```$/, '');
     }
 
-    throw new Error(lastError || 'Classification failed across active models.');
-  } catch (err) {
-    console.error('Classification error:', err);
-    res.status(500).json({ error: err.message || 'Failed to classify image' });
+    const data = JSON.parse(text);
+    return res.json(data);
+  } catch (error) {
+    console.error('Classification Error:', error);
+    return res.status(500).json({ error: error.message || 'Internal Server Error' });
   }
 });
 
-app.listen(port, () => {
-  console.log(`WasteWise server listening at http://localhost:${port}`);
-});
+// Local dev fallback
+const PORT = process.env.PORT || 3000;
+if (process.env.NODE_ENV !== 'production') {
+  app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+}
+
+module.exports = app;
