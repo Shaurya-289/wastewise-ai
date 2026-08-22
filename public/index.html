@@ -1,0 +1,1410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>WasteWise - Smart Waste Classifier</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-dark: #050806;
+      --surface-1: #0c1511;
+      --surface-2: #121e18;
+      --surface-3: #182a21;
+      --surface-highlight: #1e382b;
+      
+      --accent: #00ff88;
+      --accent-glow: rgba(0, 255, 136, 0.28);
+
+      --shadow-lg: 0 14px 28px rgba(0, 0, 0, 0.5), 0 10px 10px rgba(0, 0, 0, 0.35);
+      
+      /* 3 TIER THEMES */
+      /* 1. Normal (Green) */
+      --normal-green: #00ff88;
+      --normal-border: #163023;
+
+      /* 2. Special Handling (Yellow / Amber) */
+      --special-yellow: #f59e0b;
+      --special-yellow-bright: #fbbf24;
+      --special-bg: #1a1203;
+      --special-surface: #2b1d06;
+      --special-border: #f59e0b;
+      --special-glow: rgba(245, 158, 11, 0.55);
+      --special-text: #fef3c7;
+
+      /* 3. Hazardous (Red) */
+      --hazard-red: #ff2a44;
+      --hazard-red-bright: #ff4d61;
+      --hazard-bg: #1c0507;
+      --hazard-surface: #2d0a0f;
+      --hazard-border: #ff2a44;
+      --hazard-glow: rgba(255, 42, 68, 0.65);
+      --hazard-text: #ffe4e6;
+
+      /* Metrics */
+      --co2-bg: linear-gradient(135deg, rgba(63, 63, 70, 0.25) 0%, rgba(24, 24, 27, 0.75) 100%);
+      --co2-border: #4b5563;
+      --co2-val: #f3f4f6;
+      --co2-label: #9ca3af;
+
+      --water-bg: linear-gradient(135deg, rgba(14, 165, 233, 0.2) 0%, rgba(3, 105, 161, 0.45) 100%);
+      --water-border: rgba(56, 189, 248, 0.55);
+      --water-val: #38bdf8;
+      --water-label: #7dd3fc;
+
+      --land-bg: linear-gradient(135deg, rgba(180, 115, 60, 0.22) 0%, rgba(100, 45, 12, 0.55) 100%);
+      --land-border: rgba(212, 163, 115, 0.6);
+      --land-val: #d4a373;
+      --land-label: #e6ccb2;
+
+      --text-main: #f0fdf4;
+      --text-muted: #86efac;
+      --text-dim: #4b6356;
+      --border: #163023;
+      --border-bright: #244e39;
+      --danger: #ef4444;
+      
+      --radius-lg: 20px;
+      --radius-md: 12px;
+      --radius-sm: 8px;
+      --transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    body {
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow-x: hidden;
+      background-image: 
+        radial-gradient(circle at 10% 10%, rgba(0, 255, 136, 0.05) 0%, transparent 40%),
+        radial-gradient(circle at 90% 90%, rgba(5, 150, 105, 0.07) 0%, transparent 45%);
+    }
+
+    button, .history-card, .batch-item-chip, .insight-card, .action-btn-secondary, .minimal-upload-btn, .badge {
+      transition: var(--transition);
+      cursor: pointer;
+    }
+
+    button:hover, .action-btn-secondary:hover, .minimal-upload-btn:hover, .refresh-scan-btn:hover, .scan-another-btn:hover {
+      transform: translateY(-4px);
+    }
+
+    .history-card:hover { transform: translateY(-3px) translateX(3px); }
+    .insight-card:hover { transform: translateY(-3px); }
+
+    .metric-card { transition: var(--transition); }
+    .metric-card:hover, .stat-card:hover {
+      transform: translateY(-3px);
+      box-shadow: var(--shadow-lg);
+    }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 1.1rem 2.5rem;
+      border-bottom: 1px solid var(--border);
+      background: linear-gradient(180deg, rgba(14, 25, 20, 0.95) 0%, rgba(8, 15, 12, 0.9) 100%);
+      backdrop-filter: blur(14px);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      font-size: 1.4rem;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      color: #fff;
+    }
+
+    .brand span {
+      background: linear-gradient(135deg, #00ff88 0%, #38bdf8 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      text-shadow: 0 0 15px var(--accent-glow);
+    }
+
+    .brand-tagline {
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--text-dim);
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .app-layout {
+      display: grid;
+      grid-template-columns: 320px 1fr 320px;
+      gap: 1.5rem;
+      padding: 1.5rem 2rem;
+      flex: 1;
+      max-width: 1700px;
+      margin: 0 auto;
+      width: 100%;
+    }
+
+    .side-col {
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+      height: 100%;
+    }
+
+    .panel {
+      background: linear-gradient(180deg, var(--surface-2) 0%, var(--surface-1) 100%);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 1.25rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+      transition: var(--transition);
+    }
+
+    .history-panel {
+      flex: 1;
+      min-height: 260px;
+      max-height: 420px;
+    }
+
+    .tracker-panel { flex-shrink: 0; }
+    .insights-panel { flex: 1; min-height: 260px; max-height: 420px; }
+    .stats-panel { flex-shrink: 0; }
+
+    /* DYNAMIC PANELS: Yellow & Red Modes */
+    .panel.special-panel {
+      border: 1.5px solid var(--special-yellow) !important;
+      background: linear-gradient(180deg, var(--special-surface) 0%, var(--surface-1) 100%) !important;
+      box-shadow: 0 10px 30px rgba(245, 158, 11, 0.25) !important;
+    }
+    .panel.special-panel .panel-header {
+      color: var(--special-yellow-bright) !important;
+      border-bottom: 1px solid rgba(245, 158, 11, 0.4) !important;
+    }
+
+    .panel.hazard-panel {
+      border: 1.5px solid var(--hazard-red) !important;
+      background: linear-gradient(180deg, var(--hazard-surface) 0%, var(--surface-1) 100%) !important;
+      box-shadow: 0 10px 30px rgba(255, 42, 68, 0.25) !important;
+    }
+    .panel.hazard-panel .panel-header {
+      color: var(--hazard-red-bright) !important;
+      border-bottom: 1px solid rgba(255, 42, 68, 0.4) !important;
+    }
+
+    .panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-weight: 700;
+      font-size: 0.85rem;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 0.65rem;
+    }
+
+    .clear-btn {
+      background: transparent;
+      border: none;
+      color: var(--danger);
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+    .clear-btn:hover { text-decoration: underline; }
+
+    /* Custom Scrollbar */
+    .history-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.65rem;
+      overflow-y: auto;
+      padding-right: 6px;
+      max-height: 330px;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border-bright) transparent;
+      overscroll-behavior: contain;
+    }
+
+    .history-list::-webkit-scrollbar { width: 5px; }
+    .history-list::-webkit-scrollbar-track { background: transparent; border-radius: 10px; }
+    .history-list::-webkit-scrollbar-thumb { background: var(--border-bright); border-radius: 10px; }
+    .history-list::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+
+    .history-card {
+      background: linear-gradient(135deg, var(--surface-2) 0%, var(--surface-1) 100%);
+      border: 1px solid var(--border);
+      padding: 0.65rem;
+      border-radius: var(--radius-md);
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      animation: fadeIn 0.35s ease-out;
+    }
+
+    .history-card.hazard-history {
+      border: 1.5px solid var(--hazard-red) !important;
+      background: linear-gradient(90deg, rgba(255, 42, 68, 0.22) 0%, rgba(35, 8, 12, 0.9) 100%) !important;
+    }
+    .history-card.special-history {
+      border: 1.5px solid var(--special-yellow) !important;
+      background: linear-gradient(90deg, rgba(245, 158, 11, 0.22) 0%, rgba(40, 28, 5, 0.9) 100%) !important;
+    }
+
+    .history-thumb {
+      width: 44px;
+      height: 44px;
+      border-radius: var(--radius-sm);
+      object-fit: cover;
+      border: 1px solid var(--border);
+    }
+    .history-card.hazard-history .history-thumb { border-color: var(--hazard-red); }
+    .history-card.special-history .history-thumb { border-color: var(--special-yellow); }
+
+    .history-details { display: flex; flex-direction: column; gap: 0.2rem; overflow: hidden; flex: 1; }
+    .history-title { font-size: 0.82rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .history-meta { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
+    .history-time { font-size: 0.68rem; color: var(--text-dim); font-family: 'JetBrains Mono', monospace; }
+
+    /* Pie Tracker */
+    .pie-tracker-container {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1.1rem;
+      padding: 0.35rem 0.1rem;
+    }
+
+    .pie-chart-box { position: relative; width: 96px; height: 96px; flex-shrink: 0; }
+    .pie-chart {
+      width: 100%; height: 100%; border-radius: 50%;
+      background: conic-gradient(#1c2d24 0% 100%);
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 0 18px rgba(0, 0, 0, 0.6);
+      transition: background 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .pie-center-hole {
+      width: 58px; height: 58px; border-radius: 50%;
+      background: var(--surface-1); border: 1px solid rgba(255, 255, 255, 0.06);
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+    }
+    .pie-center-val { font-family: 'JetBrains Mono', monospace; font-weight: 800; font-size: 1.1rem; color: var(--text-main); }
+    .pie-center-label { font-size: 0.55rem; color: var(--text-dim); font-weight: 800; letter-spacing: 0.6px; }
+
+    .pie-legend-list { display: flex; flex-direction: column; gap: 0.55rem; flex: 1; }
+    .pie-legend-row { display: flex; align-items: center; justify-content: space-between; font-size: 0.74rem; font-weight: 700; }
+    .pie-legend-name { display: flex; align-items: center; gap: 0.4rem; }
+    .legend-color-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+    .dot-normal { background: #00ff88; box-shadow: 0 0 6px rgba(0, 255, 136, 0.6); }
+    .dot-special { background: #f59e0b; box-shadow: 0 0 6px rgba(245, 158, 11, 0.6); }
+    .dot-hazard { background: #ff2a44; box-shadow: 0 0 6px rgba(255, 42, 68, 0.6); }
+    .pie-legend-stat { font-family: 'JetBrains Mono', monospace; color: var(--text-muted); font-size: 0.72rem; }
+
+    /* Session Stats Widget */
+    .session-stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.6rem; }
+    .session-stat-card {
+      background: linear-gradient(135deg, var(--surface-3) 0%, var(--surface-2) 100%);
+      border: 1px solid var(--border-bright);
+      border-radius: var(--radius-md);
+      padding: 0.75rem 0.5rem;
+      text-align: center;
+      display: flex; flex-direction: column; gap: 0.2rem;
+      transition: var(--transition);
+    }
+    .session-stat-card:hover { transform: translateY(-3px); border-color: var(--accent); box-shadow: 0 0 15px var(--accent-glow); }
+    .session-stat-val { font-size: 1.25rem; font-weight: 800; color: var(--accent); font-family: 'JetBrains Mono', monospace; }
+    .session-stat-label { font-size: 0.68rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; }
+
+    /* Badges */
+    .badge {
+      display: inline-flex; align-items: center; gap: 0.3rem;
+      padding: 0.25rem 0.65rem; border-radius: 50px; font-size: 0.75rem;
+      font-weight: 700; letter-spacing: 0.3px; width: fit-content;
+    }
+    .badge-normal { background: rgba(34, 197, 94, 0.2); color: #4ade80; border: 1px solid rgba(34, 197, 94, 0.6); }
+    .badge-special { background: rgba(245, 158, 11, 0.2); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.6); }
+    .badge-hazard { background: rgba(255, 42, 68, 0.25); color: #ff5266; border: 1px solid rgba(255, 42, 68, 0.8); }
+
+    .center-stage { display: flex; flex-direction: column; gap: 1.5rem; }
+    .staging-wrapper { display: flex; flex-direction: column; gap: 1.2rem; }
+
+    .dropzone-container {
+      background: radial-gradient(circle at center, rgba(18, 32, 25, 0.8) 0%, rgba(10, 18, 14, 0.95) 100%);
+      border: 2px dashed var(--border-bright); border-radius: var(--radius-lg);
+      padding: 4.5rem 2rem; text-align: center; transition: var(--transition);
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 1.25rem; position: relative;
+    }
+    .dropzone-container.drag-over { border-color: var(--accent); background: radial-gradient(circle at center, rgba(22, 45, 34, 0.9) 0%, rgba(12, 22, 17, 0.95) 100%); }
+    .dropzone-icon {
+      width: 72px; height: 72px; border-radius: 50%;
+      background: linear-gradient(135deg, var(--surface-3) 0%, var(--surface-1) 100%);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 2.2rem; color: var(--accent); border: 1px solid var(--border-bright);
+      animation: float 4s ease-in-out infinite;
+    }
+    @keyframes float { 0%, 100% { transform: translateY(0px); } 50% { transform: translateY(-6px); } }
+
+    .dropzone-text h3 { font-size: 1.35rem; font-weight: 800; margin-bottom: 0.25rem; }
+    .dropzone-text p { color: var(--text-muted); font-size: 0.88rem; }
+
+    .action-btn-secondary {
+      background: linear-gradient(135deg, var(--surface-3) 0%, var(--surface-2) 100%);
+      border: 1px solid var(--border-bright); color: var(--text-main);
+      padding: 0.75rem 1.85rem; border-radius: 50px; font-weight: 700;
+      font-size: 0.9rem; display: flex; align-items: center; gap: 0.5rem;
+    }
+    .action-btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
+
+    .staged-photo-container {
+      display: none; background: linear-gradient(180deg, var(--surface-2) 0%, var(--surface-1) 100%);
+      border: 1px solid var(--border-bright); border-radius: var(--radius-lg);
+      padding: 2.2rem; flex-direction: column; align-items: center; justify-content: center;
+      gap: 1.5rem; animation: fadeIn 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .staged-photo-frame {
+      position: relative; width: 100%; max-width: 440px; height: 280px;
+      border-radius: var(--radius-md); overflow: hidden; border: 1px solid var(--border-bright);
+      background: #000; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7);
+    }
+    .staged-main-image { width: 100%; height: 100%; object-fit: cover; }
+    .staged-badge-count {
+      position: absolute; top: 12px; left: 12px; background: rgba(6, 9, 7, 0.85);
+      border: 1px solid var(--border-bright); color: var(--accent); padding: 0.35rem 0.85rem;
+      border-radius: 50px; font-size: 0.75rem; font-weight: 800; font-family: 'JetBrains Mono', monospace;
+    }
+    .staged-change-btn {
+      position: absolute; top: 12px; right: 12px; background: rgba(6, 9, 7, 0.85);
+      border: 1px solid var(--border-bright); color: var(--text-main); padding: 0.35rem 0.85rem;
+      border-radius: 50px; font-size: 0.75rem; font-weight: 700;
+    }
+    .staged-actions-row { display: flex; justify-content: center; width: 100%; margin-top: 0.2rem; }
+    .minimal-upload-btn {
+      background: linear-gradient(135deg, #00ff88 0%, #059669 100%); color: #03140b;
+      border: none; padding: 0.95rem 3rem; border-radius: 50px; font-weight: 800;
+      font-size: 1rem; display: flex; align-items: center; gap: 0.6rem; letter-spacing: 0.3px;
+      box-shadow: 0 0 25px var(--accent-glow);
+    }
+
+    .loading-buffer {
+      display: none; background: linear-gradient(180deg, var(--surface-2) 0%, var(--surface-1) 100%);
+      border: 1px solid var(--border-bright); border-radius: var(--radius-lg); padding: 4rem 2.5rem;
+      text-align: center; flex-direction: column; align-items: center; justify-content: center;
+      gap: 1.5rem; animation: fadeIn 0.3s ease-out;
+    }
+    .ai-radar {
+      width: 80px; height: 80px; border-radius: 50%;
+      border: 3px solid rgba(0, 255, 136, 0.2); border-top-color: var(--accent);
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .buffer-title { font-size: 1.25rem; font-weight: 800; color: var(--text-main); }
+    .buffer-status { font-size: 0.85rem; font-family: 'JetBrains Mono', monospace; color: var(--accent); margin-top: 0.3rem; }
+    .quote-box {
+      max-width: 500px; background: linear-gradient(135deg, var(--surface-2) 0%, var(--surface-3) 100%);
+      border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1rem 1.4rem;
+      font-style: italic; font-size: 0.88rem; line-height: 1.5; color: var(--text-muted); border-left: 3px solid var(--accent);
+    }
+
+    .results-container { display: none; flex-direction: column; gap: 1.5rem; animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+    .batch-selector { display: flex; gap: 0.6rem; overflow-x: auto; padding-bottom: 0.25rem; }
+    .batch-item-chip {
+      background: linear-gradient(135deg, var(--surface-2) 0%, var(--surface-1) 100%);
+      border: 1px solid var(--border); padding: 0.4rem 0.8rem; border-radius: var(--radius-sm);
+      display: flex; align-items: center; gap: 0.5rem; font-size: 0.8rem; font-weight: 600; white-space: nowrap;
+    }
+    .batch-item-chip.active { border-color: var(--accent); background: var(--surface-3); box-shadow: 0 0 12px var(--accent-glow); }
+
+    .tier-banner {
+      display: none; border-radius: var(--radius-md); padding: 1.2rem 1.6rem;
+      align-items: center; justify-content: space-between; gap: 1rem;
+    }
+    .banner-hazard {
+      background: linear-gradient(135deg, rgba(255, 42, 68, 0.45) 0%, rgba(45, 10, 15, 0.98) 100%);
+      border: 2px solid var(--hazard-red); box-shadow: 0 0 35px var(--hazard-glow);
+    }
+    .banner-special {
+      background: linear-gradient(135deg, rgba(245, 158, 11, 0.35) 0%, rgba(35, 24, 5, 0.98) 100%);
+      border: 2px solid var(--special-yellow); box-shadow: 0 0 35px var(--special-glow);
+    }
+    .banner-title { font-size: 1.15rem; font-weight: 900; letter-spacing: 0.8px; display: flex; align-items: center; gap: 0.5rem; }
+    .banner-hazard .banner-title { color: #ff4d61; text-shadow: 0 0 12px rgba(255, 42, 68, 0.7); }
+    .banner-special .banner-title { color: #fbbf24; text-shadow: 0 0 12px rgba(245, 158, 11, 0.7); }
+    .banner-desc { font-size: 0.85rem; font-weight: 600; line-height: 1.4; color: #f3f4f6; }
+
+    /* Main Result Card */
+    .result-card {
+      background: linear-gradient(160deg, #102118 0%, #0c1410 100%);
+      border: 1px solid var(--border-bright); border-radius: var(--radius-lg);
+      padding: 1.75rem; display: grid; grid-template-columns: 240px 1fr;
+      gap: 1.75rem; position: relative; box-shadow: 0 15px 35px rgba(0,0,0,0.6);
+      transition: var(--transition);
+    }
+
+    .preview-col { display: flex; flex-direction: column; gap: 0.75rem; }
+    .scanned-img { width: 100%; height: 200px; border-radius: var(--radius-md); object-fit: cover; border: 1px solid var(--border); }
+    .confidence-box {
+      background: linear-gradient(135deg, var(--surface-2) 0%, var(--surface-1) 100%);
+      border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 0.75rem;
+      display: flex; flex-direction: column; gap: 0.35rem;
+    }
+    .confidence-label-row { display: flex; justify-content: space-between; font-size: 0.75rem; font-weight: 700; color: var(--text-muted); }
+    .confidence-meter { height: 6px; background: var(--surface-3); border-radius: 50px; overflow: hidden; }
+    .confidence-fill { height: 100%; background: linear-gradient(90deg, #00ff88, #38bdf8); border-radius: 50px; transition: width 1s ease-out; }
+
+    .details-col { display: flex; flex-direction: column; gap: 1.1rem; }
+    .title-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
+    .item-name { font-size: 1.5rem; font-weight: 800; line-height: 1.2; }
+    .category-label { font-size: 0.85rem; color: var(--text-muted); font-weight: 600; margin-top: 0.2rem; }
+    .badge-stack { display: flex; gap: 0.5rem; flex-wrap: wrap; justify-content: flex-end; }
+
+    .recyclability-bar {
+      background: linear-gradient(135deg, var(--surface-2) 0%, var(--surface-1) 100%);
+      border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 0.65rem 0.9rem;
+      display: flex; align-items: center; justify-content: space-between; font-size: 0.82rem; font-weight: 700;
+    }
+
+    .disposal-guide {
+      background: linear-gradient(135deg, var(--surface-2) 0%, var(--surface-1) 100%);
+      border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1.1rem;
+      display: flex; flex-direction: column; gap: 0.75rem;
+    }
+    .guide-title { font-size: 0.75rem; font-weight: 800; text-transform: uppercase; color: var(--accent); letter-spacing: 0.6px; }
+    .management-highlight { font-size: 0.9rem; font-weight: 700; color: var(--text-main); padding-bottom: 0.4rem; border-bottom: 1px solid var(--border); }
+    .step-list { display: flex; flex-direction: column; gap: 0.45rem; list-style: none; }
+    .step-item { display: flex; align-items: center; gap: 0.6rem; font-size: 0.85rem; color: var(--text-main); }
+    .step-num {
+      width: 20px; height: 20px; border-radius: 50%;
+      background: var(--surface-3); border: 1px solid var(--border-bright);
+      color: var(--accent); font-size: 0.7rem; font-weight: 800;
+      display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    }
+
+    /* =========================================================
+       COMPLETE RED HAZARDOUS CASCADING OVERRIDES
+       ========================================================= */
+    .result-card.mode-hazard {
+      border: 2px solid var(--hazard-red) !important;
+      background: linear-gradient(160deg, var(--hazard-bg) 0%, #150305 100%) !important;
+      box-shadow: 0 0 45px rgba(255, 42, 68, 0.4) !important;
+    }
+    .result-card.mode-hazard .scanned-img { border-color: var(--hazard-red) !important; box-shadow: 0 0 15px rgba(255, 42, 68, 0.35); }
+    .result-card.mode-hazard .category-label { color: #ff8595 !important; }
+    .result-card.mode-hazard .confidence-box {
+      background: var(--hazard-surface) !important;
+      border-color: rgba(255, 42, 68, 0.5) !important;
+    }
+    .result-card.mode-hazard .confidence-label-row { color: #ffccd0 !important; }
+    .result-card.mode-hazard #confidenceVal { color: #ff4d61 !important; text-shadow: 0 0 8px rgba(255, 42, 68, 0.6); }
+    .result-card.mode-hazard .confidence-meter { background: rgba(255, 42, 68, 0.25) !important; }
+    .result-card.mode-hazard .confidence-fill {
+      background: linear-gradient(90deg, #ff4d61, #ff2a44) !important;
+      box-shadow: 0 0 10px #ff2a44 !important;
+    }
+    .result-card.mode-hazard .recyclability-bar {
+      background: var(--hazard-surface) !important;
+      border-color: rgba(255, 42, 68, 0.45) !important;
+      color: #ffe4e6 !important;
+    }
+    .result-card.mode-hazard .disposal-guide {
+      background: var(--hazard-surface) !important;
+      border: 1.5px solid rgba(255, 42, 68, 0.6) !important;
+      box-shadow: inset 0 0 15px rgba(255, 42, 68, 0.15) !important;
+    }
+    .result-card.mode-hazard .guide-title {
+      color: #ff4d61 !important;
+      text-shadow: 0 0 10px rgba(255, 42, 68, 0.5) !important;
+    }
+    .result-card.mode-hazard .management-highlight {
+      border-bottom-color: rgba(255, 42, 68, 0.4) !important;
+      color: #ff6b7d !important;
+    }
+    .result-card.mode-hazard .step-num {
+      background: rgba(255, 42, 68, 0.25) !important;
+      border-color: var(--hazard-red) !important;
+      color: #ff8595 !important;
+      box-shadow: 0 0 8px rgba(255, 42, 68, 0.6) !important;
+    }
+
+    /* Red Category Insights Override */
+    .hazard-panel .insight-card {
+      background: linear-gradient(135deg, var(--hazard-surface) 0%, #1a0507 100%) !important;
+      border: 1.5px solid rgba(255, 42, 68, 0.5) !important;
+      box-shadow: 0 0 12px rgba(255, 42, 68, 0.18) !important;
+    }
+    .hazard-panel .insight-badge {
+      color: #ff4d61 !important;
+      text-shadow: 0 0 8px rgba(255, 42, 68, 0.6) !important;
+    }
+
+    /* =========================================================
+       COMPLETE YELLOW SPECIAL HANDLING CASCADING OVERRIDES
+       ========================================================= */
+    .result-card.mode-special {
+      border: 2px solid var(--special-yellow) !important;
+      background: linear-gradient(160deg, var(--special-bg) 0%, #150e02 100%) !important;
+      box-shadow: 0 0 45px rgba(245, 158, 11, 0.35) !important;
+    }
+    .result-card.mode-special .scanned-img { border-color: var(--special-yellow) !important; box-shadow: 0 0 15px rgba(245, 158, 11, 0.35); }
+    .result-card.mode-special .category-label { color: #fde68a !important; }
+    .result-card.mode-special .confidence-box {
+      background: var(--special-surface) !important;
+      border-color: rgba(245, 158, 11, 0.5) !important;
+    }
+    .result-card.mode-special .confidence-label-row { color: #fef3c7 !important; }
+    .result-card.mode-special #confidenceVal { color: #fbbf24 !important; text-shadow: 0 0 8px rgba(245, 158, 11, 0.6); }
+    .result-card.mode-special .confidence-meter { background: rgba(245, 158, 11, 0.25) !important; }
+    .result-card.mode-special .confidence-fill {
+      background: linear-gradient(90deg, #fbbf24, #f59e0b) !important;
+      box-shadow: 0 0 10px #f59e0b !important;
+    }
+    .result-card.mode-special .recyclability-bar {
+      background: var(--special-surface) !important;
+      border-color: rgba(245, 158, 11, 0.45) !important;
+      color: #fef3c7 !important;
+    }
+    .result-card.mode-special .disposal-guide {
+      background: var(--special-surface) !important;
+      border: 1.5px solid rgba(245, 158, 11, 0.6) !important;
+      box-shadow: inset 0 0 15px rgba(245, 158, 11, 0.15) !important;
+    }
+    .result-card.mode-special .guide-title {
+      color: #fbbf24 !important;
+      text-shadow: 0 0 10px rgba(245, 158, 11, 0.5) !important;
+    }
+    .result-card.mode-special .management-highlight {
+      border-bottom-color: rgba(245, 158, 11, 0.4) !important;
+      color: #fbbf24 !important;
+    }
+    .result-card.mode-special .step-num {
+      background: rgba(245, 158, 11, 0.25) !important;
+      border-color: var(--special-yellow) !important;
+      color: #fde68a !important;
+      box-shadow: 0 0 8px rgba(245, 158, 11, 0.6) !important;
+    }
+
+    /* Yellow Category Insights Override */
+    .special-panel .insight-card {
+      background: linear-gradient(135deg, var(--special-surface) 0%, #1a1405 100%) !important;
+      border: 1.5px solid rgba(245, 158, 11, 0.5) !important;
+      box-shadow: 0 0 12px rgba(245, 158, 11, 0.18) !important;
+    }
+    .special-panel .insight-badge {
+      color: #fbbf24 !important;
+      text-shadow: 0 0 8px rgba(245, 158, 11, 0.6) !important;
+    }
+
+    /* Environmental Metrics */
+    .metrics-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
+    .metric-card { border-radius: var(--radius-md); padding: 1.25rem; display: flex; flex-direction: column; gap: 0.35rem; box-shadow: 0 6px 18px rgba(0,0,0,0.4); }
+    .metric-card.metric-co2 { background: var(--co2-bg); border: 1px solid var(--co2-border); }
+    .metric-card.metric-co2 .metric-value { color: var(--co2-val); }
+    .metric-card.metric-co2 .metric-label { color: var(--co2-label); }
+    .metric-card.metric-water { background: var(--water-bg); border: 1px solid var(--water-border); }
+    .metric-card.metric-water .metric-value { color: var(--water-val); }
+    .metric-card.metric-water .metric-label { color: var(--water-label); }
+    .metric-card.metric-land { background: var(--land-bg); border: 1px solid var(--land-border); }
+    .metric-card.metric-land .metric-value { color: var(--land-val); }
+    .metric-card.metric-land .metric-label { color: var(--land-label); }
+
+    .metric-icon { font-size: 1.35rem; }
+    .metric-value { font-size: 1.45rem; font-weight: 800; font-family: 'JetBrains Mono', monospace; }
+    .metric-label { font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
+
+    .result-action-row { display: flex; gap: 1rem; }
+    .refresh-scan-btn {
+      background: linear-gradient(135deg, var(--surface-2) 0%, var(--surface-3) 100%);
+      border: 1px solid var(--border-bright); color: var(--accent);
+      padding: 0.95rem 1.5rem; border-radius: var(--radius-md); font-weight: 800;
+      font-size: 0.95rem; display: flex; align-items: center; justify-content: center; gap: 0.5rem;
+    }
+    .scan-another-btn {
+      flex: 1; background: linear-gradient(135deg, #00ff88 0%, #059669 100%);
+      color: #03140b; border: none; padding: 0.95rem; border-radius: var(--radius-md);
+      font-weight: 800; font-size: 0.95rem; display: flex; align-items: center; justify-content: center;
+      gap: 0.5rem; box-shadow: 0 0 25px var(--accent-glow);
+    }
+
+    .facts-container { display: flex; flex-direction: column; gap: 0.9rem; overflow-y: auto; max-height: 330px; scrollbar-width: thin; }
+    .placeholder-facts { text-align: center; color: var(--text-dim); font-size: 0.85rem; padding: 3.5rem 1rem; line-height: 1.6; }
+    
+    .insight-card {
+      background: linear-gradient(135deg, var(--surface-2) 0%, var(--surface-1) 100%);
+      border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1rem;
+      display: flex; flex-direction: column; gap: 0.45rem; animation: fadeIn 0.4s ease-out;
+    }
+    .insight-badge { font-size: 0.7rem; font-weight: 800; color: var(--accent); text-transform: uppercase; letter-spacing: 0.8px; }
+    .insight-text { font-size: 0.82rem; line-height: 1.5; color: var(--text-main); }
+
+    footer {
+      border-top: 1px solid var(--border);
+      background: linear-gradient(180deg, var(--surface-2) 0%, var(--surface-1) 100%);
+      padding: 1.1rem; text-align: center; font-size: 0.85rem; font-weight: 600;
+      color: var(--text-muted); margin-top: auto;
+    }
+
+    @keyframes fadeIn { from { opacity: 0; transform: scale(0.97); } to { opacity: 1; transform: scale(1); } }
+    @keyframes slideUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+
+    @media (max-width: 1200px) {
+      .app-layout { grid-template-columns: 1fr; }
+      .result-card { grid-template-columns: 1fr; }
+      .result-action-row { flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="brand">
+      WasteWise <span>AI</span>
+    </div>
+    <div class="brand-tagline">
+      Smart Waste Classifier · 3-Tier Environmental Segregation
+    </div>
+  </header>
+
+  <main class="app-layout">
+    
+    <!-- LEFT COLUMN: Scan History (Top) + Waste Stream Pie Chart (Bottom) -->
+    <div class="side-col">
+      
+      <aside class="panel history-panel" id="historyPanel">
+        <div class="panel-header">
+          <span>Scan History</span>
+          <button class="clear-btn" id="clearHistoryBtn">Clear</button>
+        </div>
+        <div class="history-list" id="historyList">
+          <div style="text-align:center; color: var(--text-dim); font-size: 0.85rem; padding: 2.5rem 0;">
+            No previous scans.
+          </div>
+        </div>
+      </aside>
+
+      <aside class="panel tracker-panel">
+        <div class="panel-header">
+          <span>Waste Stream Tracker</span>
+        </div>
+        
+        <div class="pie-tracker-container">
+          <div class="pie-chart-box">
+            <div class="pie-chart" id="pieChart">
+              <div class="pie-center-hole">
+                <span class="pie-center-val" id="pieTotalScanned">0</span>
+                <span class="pie-center-label">TOTAL</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="pie-legend-list">
+            <div class="pie-legend-row">
+              <span class="pie-legend-name">
+                <span class="legend-color-dot dot-normal"></span>
+                <span>Normal</span>
+              </span>
+              <span class="pie-legend-stat" id="pieNormalVal">0 (0%)</span>
+            </div>
+
+            <div class="pie-legend-row">
+              <span class="pie-legend-name">
+                <span class="legend-color-dot dot-special"></span>
+                <span>Special</span>
+              </span>
+              <span class="pie-legend-stat" id="pieSpecialVal">0 (0%)</span>
+            </div>
+
+            <div class="pie-legend-row">
+              <span class="pie-legend-name">
+                <span class="legend-color-dot dot-hazard"></span>
+                <span>Hazard</span>
+              </span>
+              <span class="pie-legend-stat" id="pieHazardVal">0 (0%)</span>
+            </div>
+          </div>
+        </div>
+
+      </aside>
+
+    </div>
+
+    <!-- CENTER WORKSPACE -->
+    <section class="center-stage">
+      
+      <div class="staging-wrapper" id="stagingWrapper">
+        
+        <div class="dropzone-container" id="dropzone">
+          <input type="file" id="fileInput" multiple accept="image/*" style="display: none;" />
+          <div class="dropzone-icon">📥</div>
+          <div class="dropzone-text">
+            <h3>Drop waste images here</h3>
+            <p>Drag & drop photos or select from your computer</p>
+          </div>
+          <div class="upload-options-row">
+            <button class="action-btn-secondary" id="browseBtn">
+              📁 Browse Files
+            </button>
+          </div>
+        </div>
+
+        <div class="staged-photo-container" id="stagedPhotoContainer">
+          <div class="staged-photo-frame">
+            <img src="" id="stagedMainImage" class="staged-main-image" alt="Selected waste" />
+            <div class="staged-badge-count" id="stagedBadgeCount">1 FILE READY</div>
+            <button class="staged-change-btn" id="stagedChangeBtn">✕ Change</button>
+          </div>
+          <div class="staged-actions-row">
+            <button class="minimal-upload-btn" id="uploadBtn">
+              <span>🚀</span> Upload & Analyze
+            </button>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="loading-buffer" id="loadingBuffer">
+        <div class="ai-radar"></div>
+        <div>
+          <div class="buffer-title">AI Neural Vision Analysis</div>
+          <div class="buffer-status" id="bufferStatus">Classifying Normal, Special Handling & Hazardous streams...</div>
+        </div>
+        <div class="quote-box" id="quoteBox">
+          "The greatest threat to our planet is the belief that someone else will save it." — Robert Swan
+        </div>
+      </div>
+
+      <div class="results-container" id="resultsContainer">
+        
+        <div class="batch-selector" id="batchSelector"></div>
+
+        <div class="tier-banner banner-hazard" id="hazardBanner">
+          <div>
+            <div class="banner-title">🔴 HAZARDOUS DISPOSAL REQUIRED</div>
+            <div class="banner-desc" id="hazardBannerDesc">Toxic, corrosive, or dangerous components detected. Do not mix with domestic waste.</div>
+          </div>
+          <div class="badge badge-hazard">HAZARDOUS</div>
+        </div>
+
+        <div class="tier-banner banner-special" id="specialBanner">
+          <div>
+            <div class="banner-title">🟡 SPECIAL HANDLING REQUIRED</div>
+            <div class="banner-desc" id="specialBannerDesc">Requires dedicated recycling, cleaning, or material separation.</div>
+          </div>
+          <div class="badge badge-special">SPECIAL HANDLING</div>
+        </div>
+
+        <div class="result-card" id="mainResultCard">
+          
+          <div class="preview-col">
+            <img src="" id="resultImg" class="scanned-img" alt="Scanned waste" />
+            <div class="confidence-box">
+              <div class="confidence-label-row">
+                <span>AI Confidence</span>
+                <span id="confidenceVal">98.2%</span>
+              </div>
+              <div class="confidence-meter">
+                <div class="confidence-fill" id="confidenceFill" style="width: 98%;"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="details-col">
+            <div class="title-row">
+              <div>
+                <h2 class="item-name" id="itemName">Analyzing...</h2>
+                <div class="category-label" id="categoryHeader">Detecting category...</div>
+              </div>
+              <div class="badge-stack" id="badgeStack"></div>
+            </div>
+
+            <div class="recyclability-bar" id="recyclabilityBar">
+              <span id="recyclabilityStatusText">♻️ Calculating Recyclability...</span>
+              <span class="badge" id="recyclabilityPill">Recyclable</span>
+            </div>
+
+            <div class="disposal-guide" id="disposalGuideBox">
+              <span class="guide-title" id="guideTitle">Primary Disposal & Management</span>
+              <div class="management-highlight" id="managementMethod"></div>
+              <ul class="step-list" id="disposalSteps"></ul>
+            </div>
+          </div>
+
+        </div>
+
+        <div class="metrics-grid">
+          <div class="metric-card metric-co2 stat-card">
+            <div class="metric-icon">📉</div>
+            <div class="metric-value" id="co2Saved">0.00 kg</div>
+            <div class="metric-label">CO₂ Avoided</div>
+          </div>
+          <div class="metric-card metric-water stat-card">
+            <div class="metric-icon">💧</div>
+            <div class="metric-value" id="waterSaved">0.0 L</div>
+            <div class="metric-label">Water Conserved</div>
+          </div>
+          <div class="metric-card metric-land stat-card">
+            <div class="metric-icon">🏞️</div>
+            <div class="metric-value" id="landSaved">0.00 m²</div>
+            <div class="metric-label">Landfill Diverted</div>
+          </div>
+        </div>
+
+        <div class="result-action-row">
+          <button class="refresh-scan-btn" id="refreshScanBtn">
+            🔄 Refresh Scan
+          </button>
+          <button class="scan-another-btn" id="scanAnotherBtn">
+            📷 Scan Another Item
+          </button>
+        </div>
+
+      </div>
+
+    </section>
+
+    <!-- RIGHT COLUMN: Category Insights (Top) + Session Stats (Bottom) -->
+    <div class="side-col">
+      
+      <aside class="panel insights-panel" id="insightsPanel">
+        <div class="panel-header">
+          <span>Category Insights</span>
+        </div>
+        <div class="facts-container" id="factsContainer">
+          <div class="placeholder-facts">
+            Scan or upload an item to view related environmental management facts.
+          </div>
+        </div>
+      </aside>
+
+      <aside class="panel stats-panel">
+        <div class="panel-header">
+          <span>Session Stats</span>
+        </div>
+        <div class="session-stats-grid">
+          <div class="session-stat-card">
+            <span class="session-stat-val" id="totalScannedStat">0</span>
+            <span class="session-stat-label">📦 Scanned</span>
+          </div>
+          <div class="session-stat-card">
+            <span class="session-stat-val" id="recyclablesStat">0</span>
+            <span class="session-stat-label">♻️ Recyclables</span>
+          </div>
+          <div class="session-stat-card">
+            <span class="session-stat-val" id="ecoScoreStat">0</span>
+            <span class="session-stat-label">🌿 Eco Score</span>
+          </div>
+        </div>
+      </aside>
+
+    </div>
+
+  </main>
+
+  <footer>
+    Made with 💚 · WasteWise — Smart India, Clean India
+  </footer>
+
+  <script>
+    const dropzone = document.getElementById('dropzone');
+    const fileInput = document.getElementById('fileInput');
+    const browseBtn = document.getElementById('browseBtn');
+
+    const stagingWrapper = document.getElementById('stagingWrapper');
+    const stagedPhotoContainer = document.getElementById('stagedPhotoContainer');
+    const stagedMainImage = document.getElementById('stagedMainImage');
+    const stagedBadgeCount = document.getElementById('stagedBadgeCount');
+    const stagedChangeBtn = document.getElementById('stagedChangeBtn');
+    const uploadBtn = document.getElementById('uploadBtn');
+
+    const loadingBuffer = document.getElementById('loadingBuffer');
+    const bufferStatus = document.getElementById('bufferStatus');
+    const quoteBox = document.getElementById('quoteBox');
+
+    const resultsContainer = document.getElementById('resultsContainer');
+    const scanAnotherBtn = document.getElementById('scanAnotherBtn');
+    const refreshScanBtn = document.getElementById('refreshScanBtn');
+    const batchSelector = document.getElementById('batchSelector');
+    
+    const hazardBanner = document.getElementById('hazardBanner');
+    const hazardBannerDesc = document.getElementById('hazardBannerDesc');
+    const specialBanner = document.getElementById('specialBanner');
+    const specialBannerDesc = document.getElementById('specialBannerDesc');
+
+    const mainResultCard = document.getElementById('mainResultCard');
+    const disposalGuideBox = document.getElementById('disposalGuideBox');
+    const guideTitle = document.getElementById('guideTitle');
+    const insightsPanel = document.getElementById('insightsPanel');
+
+    const resultImg = document.getElementById('resultImg');
+    const itemName = document.getElementById('itemName');
+    const categoryHeader = document.getElementById('categoryHeader');
+    const badgeStack = document.getElementById('badgeStack');
+    const confidenceVal = document.getElementById('confidenceVal');
+    const confidenceFill = document.getElementById('confidenceFill');
+    const recyclabilityStatusText = document.getElementById('recyclabilityStatusText');
+    const recyclabilityPill = document.getElementById('recyclabilityPill');
+    const managementMethod = document.getElementById('managementMethod');
+    const disposalSteps = document.getElementById('disposalSteps');
+
+    const co2SavedEl = document.getElementById('co2Saved');
+    const waterSavedEl = document.getElementById('waterSaved');
+    const landSavedEl = document.getElementById('landSaved');
+
+    const factsContainer = document.getElementById('factsContainer');
+    const historyList = document.getElementById('historyList');
+    const clearHistoryBtn = document.getElementById('clearHistoryBtn');
+
+    const totalScannedStat = document.getElementById('totalScannedStat');
+    const recyclablesStat = document.getElementById('recyclablesStat');
+    const ecoScoreStat = document.getElementById('ecoScoreStat');
+
+    const pieChart = document.getElementById('pieChart');
+    const pieTotalScanned = document.getElementById('pieTotalScanned');
+    const pieNormalVal = document.getElementById('pieNormalVal');
+    const pieSpecialVal = document.getElementById('pieSpecialVal');
+    const pieHazardVal = document.getElementById('pieHazardVal');
+
+    const ecoQuotes = [
+      `"The greatest threat to our planet is the belief that someone else will save it." — Robert Swan`,
+      `"Special waste requires special care. Separate hazardous and bulky materials at source."`,
+      `"Cleanliness is next to godliness. Segregate at source for a cleaner tomorrow."`,
+      `"Green for Normal, Yellow for Special Handling, Red for Hazardous."`
+    ];
+
+    const bufferPhrases = [
+      "Running Gemini Vision inference...",
+      "Classifying 3-tier waste streams: Normal, Special & Hazardous...",
+      "Evaluating material handling and recyclability..."
+    ];
+
+    let stats = {
+      scanned: 0,
+      recyclables: 0,
+      ecoScore: 0,
+      normalCount: 0,
+      specialCount: 0,
+      hazardCount: 0
+    };
+
+    let scanHistory = [];
+    let stagedFilesList = [];
+    let currentBatch = [];
+    let selectedBatchIndex = 0;
+
+    function getHandlingTier(item) {
+      if (item.handlingTier) return item.handlingTier.toLowerCase();
+      
+      const cat = (item.category || '').toLowerCase();
+      const name = (item.name || '').toLowerCase();
+
+      if (cat.includes('hazard') || cat.includes('biomedical') || 
+          name.includes('battery') || name.includes('batteries') || name.includes('chemical') || 
+          name.includes('medicine') || name.includes('bulb') || name.includes('cfl') || name.includes('acid')) {
+        return 'hazardous';
+      }
+
+      if (cat.includes('special') || cat.includes('e-waste') || cat.includes('electronic') || 
+          name.includes('thermocol') || name.includes('styrofoam') || name.includes('tire') || 
+          name.includes('cloth') || name.includes('fabric') || name.includes('textile') || 
+          name.includes('tetra') || name.includes('cable') || name.includes('wire') || name.includes('foam')) {
+        return 'special';
+      }
+
+      return 'normal';
+    }
+
+    function updateStats(tier, isRecyclable, scoreAddition) {
+      stats.scanned += 1;
+      if (isRecyclable) stats.recyclables += 1;
+      stats.ecoScore += (scoreAddition || 25);
+
+      if (tier === 'hazardous') stats.hazardCount += 1;
+      else if (tier === 'special') stats.specialCount += 1;
+      else stats.normalCount += 1;
+
+      renderStats();
+    }
+
+    function renderStats() {
+      totalScannedStat.textContent = stats.scanned;
+      recyclablesStat.textContent = stats.recyclables;
+      ecoScoreStat.textContent = stats.ecoScore;
+
+      const total = stats.scanned || 0;
+      pieTotalScanned.textContent = total;
+
+      if (total === 0) {
+        pieChart.style.background = `conic-gradient(#1c2d24 0% 100%)`;
+        pieNormalVal.textContent = '0 (0%)';
+        pieSpecialVal.textContent = '0 (0%)';
+        pieHazardVal.textContent = '0 (0%)';
+        return;
+      }
+
+      const normalPct = Math.round((stats.normalCount / total) * 100);
+      const specialPct = Math.round((stats.specialCount / total) * 100);
+      const hazardPct = Math.round((stats.hazardCount / total) * 100);
+
+      pieNormalVal.textContent = `${stats.normalCount} (${normalPct}%)`;
+      pieSpecialVal.textContent = `${stats.specialCount} (${specialPct}%)`;
+      pieHazardVal.textContent = `${stats.hazardCount} (${hazardPct}%)`;
+
+      const normalDeg = (stats.normalCount / total) * 360;
+      const specialDeg = normalDeg + (stats.specialCount / total) * 360;
+
+      pieChart.style.background = `conic-gradient(
+        #00ff88 0deg ${normalDeg}deg,
+        #f59e0b ${normalDeg}deg ${specialDeg}deg,
+        #ff2a44 ${specialDeg}deg 360deg
+      )`;
+    }
+
+    browseBtn.addEventListener('click', () => fileInput.click());
+
+    ['dragenter', 'dragover'].forEach(evt => {
+      dropzone.addEventListener(evt, (e) => {
+        e.preventDefault();
+        dropzone.classList.add('drag-over');
+      });
+    });
+
+    ['dragleave', 'drop'].forEach(evt => {
+      dropzone.addEventListener(evt, (e) => {
+        e.preventDefault();
+        dropzone.classList.remove('drag-over');
+      });
+    });
+
+    dropzone.addEventListener('drop', (e) => {
+      if (e.dataTransfer.files.length > 0) stageFiles(e.dataTransfer.files);
+    });
+
+    fileInput.addEventListener('change', (e) => {
+      if (e.target.files.length > 0) stageFiles(e.target.files);
+    });
+
+    function stageFiles(files) {
+      stagedFilesList = Array.from(files);
+      if (stagedFilesList.length === 0) return;
+
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        stagedMainImage.src = e.target.result;
+        stagedBadgeCount.textContent = `${stagedFilesList.length} FILE${stagedFilesList.length > 1 ? 'S' : ''} READY`;
+        dropzone.style.display = 'none';
+        stagedPhotoContainer.style.display = 'flex';
+      };
+      reader.readAsDataURL(stagedFilesList[0]);
+    }
+
+    function resetStaging() {
+      stagedPhotoContainer.style.display = 'none';
+      dropzone.style.display = 'flex';
+      stagedFilesList = [];
+      fileInput.value = '';
+    }
+
+    stagedChangeBtn.addEventListener('click', resetStaging);
+
+    async function analyzeSingleFile(file) {
+      const formData = new FormData();
+      formData.append('image', file);
+
+      const res = await fetch('/api/analyze', {
+        method: 'POST',
+        body: formData
+      });
+
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.error || `Server error ${res.status}`);
+      }
+
+      const aiData = await res.json();
+      return {
+        rawFile: file,
+        name: aiData.name || 'Identified Object',
+        category: aiData.category || 'General Waste',
+        wasteType: aiData.wasteType || 'Dry Waste',
+        handlingTier: aiData.handlingTier || null,
+        warningMessage: aiData.warningMessage || null,
+        primaryManagement: aiData.primaryManagement || 'Specialized handling facility',
+        steps: aiData.steps || ['Dispose responsibly in designated safety stream.'],
+        facts: aiData.facts || [],
+        confidence: aiData.confidence || 95.0,
+        co2: aiData.co2 || 0.15,
+        water: aiData.water || 2.0,
+        land: aiData.land || 0.02,
+        isRecyclable: !!aiData.isRecyclable,
+        ecoScoreReward: aiData.ecoScoreReward || 25,
+        imgSrc: URL.createObjectURL(file),
+        fileName: file.name,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      };
+    }
+
+    uploadBtn.addEventListener('click', async () => {
+      if (stagedFilesList.length === 0) return;
+      
+      stagingWrapper.style.display = 'none';
+      loadingBuffer.style.display = 'flex';
+
+      quoteBox.textContent = ecoQuotes[Math.floor(Math.random() * ecoQuotes.length)];
+      let phraseIdx = 0;
+      const phraseInterval = setInterval(() => {
+        phraseIdx = (phraseIdx + 1) % bufferPhrases.length;
+        bufferStatus.textContent = bufferPhrases[phraseIdx];
+      }, 600);
+
+      try {
+        currentBatch = [];
+        for (let i = 0; i < stagedFilesList.length; i++) {
+          const item = await analyzeSingleFile(stagedFilesList[i]);
+          currentBatch.push(item);
+        }
+
+        clearInterval(phraseInterval);
+        loadingBuffer.style.display = 'none';
+        resultsContainer.style.display = 'flex';
+
+        renderBatchSelector();
+        displayActiveItem(0);
+        
+        const tier = getHandlingTier(currentBatch[0]);
+        saveToHistory(currentBatch[0], tier);
+        updateStats(tier, currentBatch[0].isRecyclable, currentBatch[0].ecoScoreReward);
+
+      } catch (err) {
+        clearInterval(phraseInterval);
+        loadingBuffer.style.display = 'none';
+        stagingWrapper.style.display = 'flex';
+        alert('AI Classification Error: ' + err.message);
+      }
+    });
+
+    refreshScanBtn.addEventListener('click', async () => {
+      const activeItem = currentBatch[selectedBatchIndex];
+      if (!activeItem || !activeItem.rawFile) return;
+
+      resultsContainer.style.display = 'none';
+      loadingBuffer.style.display = 'flex';
+      bufferStatus.textContent = "Re-evaluating image features with Gemini Vision...";
+
+      try {
+        const updatedItem = await analyzeSingleFile(activeItem.rawFile);
+        currentBatch[selectedBatchIndex] = updatedItem;
+
+        loadingBuffer.style.display = 'none';
+        resultsContainer.style.display = 'flex';
+
+        displayActiveItem(selectedBatchIndex);
+        const tier = getHandlingTier(updatedItem);
+        saveToHistory(updatedItem, tier);
+      } catch (err) {
+        loadingBuffer.style.display = 'none';
+        resultsContainer.style.display = 'flex';
+        alert('Re-scan Error: ' + err.message);
+      }
+    });
+
+    scanAnotherBtn.addEventListener('click', () => {
+      resultsContainer.style.display = 'none';
+      stagingWrapper.style.display = 'flex';
+      resetStaging();
+
+      insightsPanel.className = 'panel insights-panel';
+      mainResultCard.className = 'result-card';
+      hazardBanner.style.display = 'none';
+      specialBanner.style.display = 'none';
+      guideTitle.textContent = 'Primary Disposal & Management';
+
+      factsContainer.innerHTML = `<div class="placeholder-facts">Scan or upload an item to view related environmental management facts.</div>`;
+    });
+
+    function renderBatchSelector() {
+      if (currentBatch.length <= 1) {
+        batchSelector.innerHTML = '';
+        return;
+      }
+
+      batchSelector.innerHTML = currentBatch.map((item, idx) => {
+        const tier = getHandlingTier(item);
+        const icon = tier === 'hazardous' ? '🔴' : tier === 'special' ? '🟡' : '🟢';
+        return `
+          <div class="batch-item-chip ${idx === 0 ? 'active' : ''}" onclick="switchBatchItem(${idx})">
+            <span>${icon}</span> Item #${idx + 1}: ${item.name}
+          </div>
+        `;
+      }).join('');
+    }
+
+    window.switchBatchItem = function(index) {
+      selectedBatchIndex = index;
+      document.querySelectorAll('.batch-item-chip').forEach((chip, i) => {
+        chip.classList.toggle('active', i === index);
+      });
+      displayActiveItem(index);
+    };
+
+    function displayActiveItem(index) {
+      const item = currentBatch[index];
+      if (!item) return;
+
+      const tier = getHandlingTier(item);
+
+      resultImg.src = item.imgSrc;
+      itemName.textContent = item.name;
+      categoryHeader.textContent = item.category;
+
+      const isWet = item.wasteType.toLowerCase().includes('wet');
+
+      // Reset dynamic panel & card classes
+      insightsPanel.className = 'panel insights-panel';
+      mainResultCard.className = 'result-card';
+      hazardBanner.style.display = 'none';
+      specialBanner.style.display = 'none';
+
+      if (tier === 'hazardous') {
+        hazardBanner.style.display = 'flex';
+        hazardBannerDesc.textContent = item.warningMessage || 'Toxic, corrosive, or dangerous components detected. Do not mix with domestic waste.';
+        
+        mainResultCard.classList.add('mode-hazard');
+        insightsPanel.classList.add('hazard-panel');
+        guideTitle.textContent = '🔴 HAZARDOUS DISPOSAL PROTOCOL';
+        managementMethod.innerHTML = `⚠️ ${item.primaryManagement}`;
+
+        recyclabilityStatusText.innerHTML = `⚠️ <strong>Hazardous Material</strong> (Certified Recovery Only)`;
+        recyclabilityPill.className = 'badge badge-hazard';
+        recyclabilityPill.textContent = 'Special Recovery';
+
+        badgeStack.innerHTML = `
+          <span class="badge badge-hazard">🔴 HAZARDOUS</span>
+          <span class="badge badge-hazard">${item.category}</span>
+        `;
+      } else if (tier === 'special') {
+        specialBanner.style.display = 'flex';
+        specialBannerDesc.textContent = item.warningMessage || 'Requires dedicated recycling, cleaning, or material separation.';
+        
+        mainResultCard.classList.add('mode-special');
+        insightsPanel.classList.add('special-panel');
+        guideTitle.textContent = '🟡 SPECIAL HANDLING PROTOCOL';
+        managementMethod.innerHTML = `⚙️ ${item.primaryManagement}`;
+
+        recyclabilityStatusText.innerHTML = `🟡 <strong>Special Stream</strong> (Requires Pre-Processing)`;
+        recyclabilityPill.className = 'badge badge-special';
+        recyclabilityPill.textContent = 'Special Handling';
+
+        badgeStack.innerHTML = `
+          <span class="badge badge-special">🟡 SPECIAL HANDLING</span>
+          <span class="badge badge-special">${item.category}</span>
+        `;
+      } else {
+        guideTitle.textContent = '🟢 PRIMARY DISPOSAL & MANAGEMENT';
+        managementMethod.textContent = item.primaryManagement;
+
+        if (item.isRecyclable) {
+          recyclabilityStatusText.innerHTML = `♻️ <strong>Highly Recyclable</strong> (Eligible for Material Reclamation)`;
+          recyclabilityPill.className = 'badge badge-normal';
+          recyclabilityPill.textContent = '100% Recyclable';
+        } else {
+          recyclabilityStatusText.innerHTML = `🚫 <strong>Non-Recyclable</strong> (Landfill / Energy Recovery)`;
+          recyclabilityPill.className = 'badge';
+          recyclabilityPill.textContent = 'Non-Recyclable';
+        }
+
+        badgeStack.innerHTML = `
+          <span class="badge badge-normal">${isWet ? '💧 Wet Waste' : '📦 Dry Waste'}</span>
+          <span class="badge badge-normal">🟢 ${item.category}</span>
+        `;
+      }
+
+      confidenceVal.textContent = `${Number(item.confidence).toFixed(1)}%`;
+      confidenceFill.style.width = `${item.confidence}%`;
+
+      disposalSteps.innerHTML = item.steps.map((step, idx) => `
+        <li class="step-item">
+          <div class="step-num">${idx + 1}</div>
+          <span>${step}</span>
+        </li>
+      `).join('');
+
+      co2SavedEl.textContent = `${Number(item.co2).toFixed(2)} kg`;
+      waterSavedEl.textContent = `${Number(item.water).toFixed(1)} L`;
+      landSavedEl.textContent = `${Number(item.land).toFixed(2)} m²`;
+
+      if (item.facts && item.facts.length > 0) {
+        factsContainer.innerHTML = item.facts.map(fact => `
+          <div class="insight-card">
+            <span class="insight-badge">${fact.title}</span>
+            <p class="insight-text">${fact.text}</p>
+          </div>
+        `).join('');
+      } else {
+        factsContainer.innerHTML = `<div class="placeholder-facts">No specific insights returned for this item.</div>`;
+      }
+    }
+
+    function saveToHistory(item, tier) {
+      scanHistory.unshift({
+        name: item.name,
+        tier: tier,
+        wasteType: item.wasteType,
+        imgSrc: item.imgSrc,
+        timestamp: item.timestamp
+      });
+      if (scanHistory.length > 25) scanHistory.pop();
+      renderHistory();
+    }
+
+    function renderHistory() {
+      if (scanHistory.length === 0) {
+        historyList.innerHTML = `<div style="text-align:center; color: var(--text-dim); font-size: 0.85rem; padding: 2.5rem 0;">No previous scans.</div>`;
+        return;
+      }
+
+      historyList.innerHTML = scanHistory.map(item => {
+        const tierClass = item.tier === 'hazardous' ? 'hazard-history' : item.tier === 'special' ? 'special-history' : '';
+        const badgeClass = item.tier === 'hazardous' ? 'badge-hazard' : item.tier === 'special' ? 'badge-special' : 'badge-normal';
+        const tierLabel = item.tier === 'hazardous' ? '🔴 Hazardous' : item.tier === 'special' ? '🟡 Special' : '🟢 Normal';
+
+        return `
+          <div class="history-card ${tierClass}">
+            <img src="${item.imgSrc}" class="history-thumb" alt="thumbnail" />
+            <div class="history-details">
+              <span class="history-title">${item.name}</span>
+              <div class="history-meta">
+                <span class="badge ${badgeClass}" style="font-size: 0.65rem; padding: 0.15rem 0.45rem;">${tierLabel}</span>
+                <span class="history-time">${item.timestamp}</span>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    clearHistoryBtn.addEventListener('click', () => {
+      scanHistory = [];
+      renderHistory();
+    });
+
+    renderStats();
+    renderHistory();
+  </script>
+</body>
+</html>
