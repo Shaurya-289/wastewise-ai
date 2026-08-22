@@ -13,45 +13,66 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-// In-memory file storage (Required for serverless environments like Vercel)
+// RAM Memory Storage for Vercel Serverless
 const storage = multer.memoryStorage();
 const upload = multer({
   storage: storage,
-  limits: { fileSize: 10 * 1024 * 1024 } // 10MB limit
+  limits: { fileSize: 10 * 1024 * 1024 } // 10MB
 });
 
-// Initialize Google Gemini API
+// Initialize Gemini API
 const apiKey = process.env.GEMINI_API_KEY;
 const genAI = apiKey ? new GoogleGenerativeAI(apiKey) : null;
 
-// Core Classification Controller
+// Model Fallback Priority List
+const MODEL_CANDIDATES = [
+  'gemini-2.0-flash',
+  'gemini-1.5-flash',
+  'gemini-1.5-flash-latest',
+  'gemini-1.5-pro'
+];
+
+// Helper: Try models sequentially until one succeeds
+async function generateWithFallback(prompt, imagePart) {
+  let lastError = null;
+
+  for (const modelName of MODEL_CANDIDATES) {
+    try {
+      const model = genAI.getGenerativeModel({ model: modelName });
+      const result = await model.generateContent([prompt, imagePart]);
+      const responseText = result.response.text().trim();
+      return { responseText, usedModel: modelName };
+    } catch (err) {
+      console.warn(`Model ${modelName} failed (${err.message}). Trying next fallback...`);
+      lastError = err;
+    }
+  }
+  throw lastError || new Error('All model fallbacks exhausted.');
+}
+
+// Classification Handler
 const handleAnalysis = async (req, res) => {
   try {
     if (!genAI) {
       return res.status(500).json({
-        error: 'GEMINI_API_KEY is missing from environment variables.'
+        error: 'GEMINI_API_KEY is not configured in Vercel environment variables.'
       });
     }
 
     if (!req.file) {
-      return res.status(400).json({
-        error: 'No image file uploaded.'
-      });
+      return res.status(400).json({ error: 'No image file uploaded.' });
     }
 
-    // Use Gemini 1.5 Flash
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-
-    const prompt = `You are an expert waste classification AI for India municipal segregation systems.
-Analyze the image and respond ONLY with a raw, valid JSON object (do not wrap in markdown or backticks):
+    const prompt = `You are an expert waste classification AI for Indian municipal segregation standards.
+Analyze the image and respond ONLY with a raw JSON object (no markdown, no backticks, no explanations):
 {
   "item": "Name of the detected object",
   "category": "DRY" or "WET" or "HAZARDOUS" or "E-WASTE",
   "bin": "Blue Bin" or "Green Bin" or "Red Bin" or "Special Handling",
   "recyclable": true,
   "confidence": 95,
-  "hinglish_message": "A friendly, localized message in Hinglish explaining how to handle it",
-  "tips": "Practical step-by-step disposal, safety, or cleaning tip",
+  "hinglish_message": "A helpful, conversational message in Hinglish explaining how to dispose it",
+  "tips": "Practical step-by-step segregation or cleaning tip",
   "impact": {
     "co2_avoided_kg": 0.25,
     "water_conserved_l": 1.5,
@@ -59,7 +80,6 @@ Analyze the image and respond ONLY with a raw, valid JSON object (do not wrap in
   }
 }`;
 
-    // Read directly from RAM buffer
     const imagePart = {
       inlineData: {
         data: req.file.buffer.toString('base64'),
@@ -67,42 +87,43 @@ Analyze the image and respond ONLY with a raw, valid JSON object (do not wrap in
       }
     };
 
-    const result = await model.generateContent([prompt, imagePart]);
-    let responseText = result.response.text().trim();
+    const { responseText, usedModel } = await generateWithFallback(prompt, imagePart);
 
-    // Clean markdown code blocks if returned
-    if (responseText.startsWith('```json')) {
-      responseText = responseText.replace(/^```json\s*/, '').replace(/\s*```$/, '');
-    } else if (responseText.startsWith('```')) {
-      responseText = responseText.replace(/^```\s*/, '').replace(/\s*```$/, '');
+    // Clean any markdown backticks
+    let cleanedText = responseText;
+    if (cleanedText.startsWith('```json')) {
+      cleanedText = cleanedText.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+    } else if (cleanedText.startsWith('```')) {
+      cleanedText = cleanedText.replace(/^```\s*/, '').replace(/\s*```$/, '');
     }
 
-    const parsedData = JSON.parse(responseText);
+    const parsedData = JSON.parse(cleanedText);
+    parsedData.model_used = usedModel;
+
     return res.status(200).json(parsedData);
   } catch (error) {
-    console.error('Classification error:', error);
+    console.error('Final Classification Error:', error);
     return res.status(500).json({
       error: error.message || 'Failed to process waste image classification.'
     });
   }
 };
 
-// Route definitions (supporting both endpoints)
+// Routes
 app.post('/api/analyze', upload.single('image'), handleAnalysis);
 app.post('/classify', upload.single('image'), handleAnalysis);
 
-// Serve index.html on root
+// Root routing
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// Local development server listener
+// Local dev listener
 const PORT = process.env.PORT || 3000;
 if (!process.env.VERCEL) {
   app.listen(PORT, () => {
-    console.log(`WasteWise AI server running locally on http://localhost:${PORT}`);
+    console.log(`Server running on http://localhost:${PORT}`);
   });
 }
 
-// Export app for Vercel Serverless Functions
 module.exports = app;
