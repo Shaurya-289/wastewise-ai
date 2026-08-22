@@ -49,7 +49,7 @@ Analyze the image and respond ONLY with a raw JSON object (no markdown, no backt
     const base64Data = req.file.buffer.toString('base64');
 
     // Models to try in priority order
-    const candidateModels = ['gemini-3.5-flash'];
+    const candidateModels = ['gemini-3.6-flash'];
     let lastError = null;
     let rawText = '';
 
